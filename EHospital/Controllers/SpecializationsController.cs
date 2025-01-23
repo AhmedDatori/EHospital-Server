@@ -55,6 +55,8 @@ namespace EHospital.Controllers
         public async Task<IActionResult> DeleteSpecialization(int id)
         {
             var specialization = await _context.Specializations.FirstOrDefaultAsync(s => s.ID == id);
+            var doctors = await _context.Doctors.Where(d => d.SpecializationID == id).ToListAsync();
+            if (doctors.Count > 0) return BadRequest("Cannot delete specialization with doctors assigned to it");
 
             if (specialization == null) return NotFound();
             _context.Specializations.Remove(specialization);

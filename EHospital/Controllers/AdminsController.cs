@@ -6,6 +6,7 @@ using EHospital.Data;
 using EHospital.Services;
 using System.Numerics;
 using Microsoft.AspNetCore.Authorization;
+using System.Security.Claims;
 
 namespace EHospital.Controllers
 {
@@ -21,27 +22,45 @@ namespace EHospital.Controllers
             _context = context;
             _authService = authService;
         }
-        //[Authorize(Roles = "Admin")]
+        [Authorize]
         [HttpGet]
         public async Task<ActionResult> GetAdmins()
         {
+            var currentUserRole = HttpContext.User.FindFirstValue("role");
+            if (currentUserRole != "admin")
+                return Forbid("You are not authorized to view this content");
             var admins = await _context.Admins.ToListAsync();
             return Ok(admins);
         }
-        //[Authorize(Roles = "Admin")]
+        [Authorize]
         [HttpGet("{id}")]
         public async Task<ActionResult> GetAdmin(int id)
         {
-            var admin = await _context.Admins
-                .Where(a => a.ID == id).FirstOrDefaultAsync();
+            var currentUserRole = HttpContext.User.FindFirstValue("role");
+            if (currentUserRole != "admin")
+                return Forbid("You are not authorized to view this content");
+
+            var admin = await _context.Admins.FindAsync(id);
             if (admin == null) return NotFound();
             return Ok(admin);
         }
 
         //get admin by admin.userID
+        [Authorize]
         [HttpGet("userId/{userID}")]
         public async Task<ActionResult> GetAdminByUserID(int userID)
         {
+            var currentUserRole = HttpContext.User.FindFirstValue("role");
+
+            var claims = HttpContext.User.Claims;
+            foreach (var claim in claims)
+            {
+                Console.WriteLine($"{claim.Type}: {claim.Value}");
+            }
+
+            if (currentUserRole != "admin")
+                return Forbid("You are not authorized to view this content");
+
             var admin = await _context.Admins
                 .Where(a => a.UserID == userID)
                 .FirstOrDefaultAsync();
@@ -51,10 +70,15 @@ namespace EHospital.Controllers
 
 
 
-        //[Authorize(Roles = "Admin")]
+        [Authorize]
         [HttpPost]
         public async Task<ActionResult> AddAdmin(Admins admin)
         {
+            var currentUserRole = HttpContext.User.FindFirstValue("role");
+            if (currentUserRole != "admin")
+                return Forbid("You are not authorized to view this content");
+
+
             Users newUser = new Users
             {
                 Email = admin.Email,
@@ -79,11 +103,17 @@ namespace EHospital.Controllers
             await _context.SaveChangesAsync();
             return CreatedAtAction(nameof(GetAdmin), new { id = admin.ID }, admin);
         }
-        //[Authorize(Roles = "Admin")]
+
+        [Authorize]
         [HttpPut("{id}")]
         public async Task<IActionResult> UpdateAdmin(int id, Admins updatedAdmin)
         {
-            var admin = await _context.Admins.FirstOrDefaultAsync(a => a.ID == id);
+            var currentUserRole = HttpContext.User.FindFirstValue("role");
+            if (currentUserRole != "admin")
+                return Forbid("You are not authorized to view this content");
+
+
+            var admin = await _context.Admins.FindAsync(id);
             if (admin == null) return NotFound();
 
             var userUpdate = await _authService.UpdateUserAsync(updatedAdmin.Email, admin.Email, updatedAdmin.Password);
@@ -99,22 +129,30 @@ namespace EHospital.Controllers
             await _context.SaveChangesAsync();
             return Ok(admin);
         }
-        [Authorize(Roles = "Admin")]
+
+
+        [Authorize]
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteAdmin(int id)
         {
-            var admin = await _context.Admins.FirstOrDefaultAsync(a => a.ID == id);
+            var currentUserRole = HttpContext.User.FindFirstValue("role");
+            if (currentUserRole != "admin")
+                return Forbid("You are not authorized to view this content");
+
+
+            var admin = await _context.Admins.FindAsync(id);
             if (admin == null) return NotFound();
-
-            // Remove the admin entry first
+            
+           
             _context.Admins.Remove(admin);
-            await _context.SaveChangesAsync(); // Ensure this save is completed before proceeding
+            await _context.SaveChangesAsync(); 
 
-            // Assuming you need to delete a corresponding user
-            var user = await _context.UserH.FirstOrDefaultAsync(u => u.Email == admin.Email);
+
+            
+            var user = await _context.UserH.FindAsync(admin.UserID);
             if (user != null)
             {
-                await _authService.DeleteUserAsync(user); // Assuming this method does not use _context internally
+                await _authService.DeleteUserAsync(user); 
             }
 
             return NoContent();

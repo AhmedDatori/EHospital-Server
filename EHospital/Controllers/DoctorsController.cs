@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Hybrid;
+using System.Security.Claims;
 using System.Threading.Tasks;
 
 namespace EHospital.Controllers
@@ -69,6 +70,11 @@ namespace EHospital.Controllers
         [HttpPost]
         public async Task<ActionResult> AddDoctor(Doctors newDoctor)
         {
+            var currentUserID = HttpContext.User.FindFirstValue("userID");
+            var currentUserRole = HttpContext.User.FindFirstValue("role");
+
+            if (currentUserRole != "admin") return Forbid();
+
             Users newUser = new Users
             {
                 Email = newDoctor.Email,
@@ -94,12 +100,19 @@ namespace EHospital.Controllers
             return CreatedAtAction(nameof(GetDoctorById), new { id = newDoctor.ID }, newDoctor);
         }
 
+        [Authorize]
         [HttpPut("{id}")]
         public async Task<IActionResult> UpdateDoctor(int id, Doctors updatedDoctor)
         {
+            var currentUserID = HttpContext.User.FindFirstValue("userID");
+            var currentUserRole = HttpContext.User.FindFirstValue("role");
+
+
             var doctor = await _context.Doctors.FirstOrDefaultAsync(x => x.ID == id);
             if (doctor == null) return NotFound();
 
+            if (currentUserRole != "admin" && currentUserID!= doctor.UserID.ToString()) return Forbid();
+            
             var userUpdate = await _authService.UpdateUserAsync(updatedDoctor.Email, doctor.Email, updatedDoctor.Password);
             if (userUpdate == null)
                 return BadRequest("Problem updating user");
@@ -118,17 +131,26 @@ namespace EHospital.Controllers
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteDoctor(int id)
         {
+            var currentUserID = HttpContext.User.FindFirstValue("userID");
+            var currentUserRole = HttpContext.User.FindFirstValue("role");
+
+
             var doctor = await _context.Doctors.FindAsync(id);
             if (doctor == null) return NotFound();
 
+            if (currentUserRole != "admin" && currentUserID != doctor.UserID.ToString()) return Forbid();
+
             _context.Doctors.Remove(doctor);
-            await _context.SaveChangesAsync(); // Complete all changes related to doctor before proceeding
+            await _context.SaveChangesAsync();
+
+            var appointments = await _context.Appointments.Where(a => a.DoctorID == id).ToListAsync();
+            _context.Appointments.RemoveRange(appointments);
+            await _context.SaveChangesAsync();
 
             var user = await _context.UserH.FindAsync(doctor.UserID);
             if (user != null)
             {
-                await _authService.DeleteUserAsync(user); // This method needs to await all its internal operations using _context
-                 // Only called after DeleteUserAsync completes
+                await _authService.DeleteUserAsync(user); 
             }
 
             return NoContent();

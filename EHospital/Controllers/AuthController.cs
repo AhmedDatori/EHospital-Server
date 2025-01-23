@@ -62,18 +62,8 @@ namespace EHospital.Controllers
 
 
 
-        [HttpGet]
-        public IActionResult AuthenticatedOnlyEndpoint()
-        {
-            return Ok("You are authenticated");
-        }
-
-        [Authorize(Roles = "admin")]
-        [HttpGet("admin")]
-        public IActionResult AdminOnlyEndpoint()
-        {
-            return Ok("You are Admin");
-        }
+       
+        
 
         
     
