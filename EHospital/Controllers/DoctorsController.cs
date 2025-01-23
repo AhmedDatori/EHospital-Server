@@ -4,6 +4,7 @@ using EHospital.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Hybrid;
 using System.Threading.Tasks;
 
 namespace EHospital.Controllers
@@ -14,43 +15,57 @@ namespace EHospital.Controllers
     {
         private readonly UsersDbContext _context;
         private readonly IAuthService _authService;
+        private readonly HybridCache _hybridCache;
 
-        public DoctorsController(UsersDbContext context, IAuthService authService)
+        public DoctorsController(UsersDbContext context, IAuthService authService , HybridCache hybridCache)
         {
             _context = context;
             _authService = authService;
+            _hybridCache = hybridCache;
         }
 
         [HttpGet]
         public async Task<ActionResult> GetDoctors()
         {
-            var doctors = await _context.Doctors.ToListAsync();
-            return Ok(doctors);
+            var cachKey = "Doctors";
+            var cachedDoctor = await _hybridCache.GetOrCreateAsync(cachKey, async t =>
+            {
+                var doctors = await _context.Doctors.ToListAsync();
+                return doctors;
+            });
+            return Ok(cachedDoctor);
         }
 
         [HttpGet("{id}")]
         public async Task<ActionResult> GetDoctorById(int id)
         {
-            var doctor = await _context.Doctors
-                .Where(d => d.ID == id)
-                .FirstOrDefaultAsync();
-            if (doctor == null) return NotFound();
-            return Ok(doctor);
+            var cachedDoctor = await _hybridCache.GetOrCreateAsync($"Doctor_{id}", async t =>
+            {
+                var doctor = await _context.Doctors.FindAsync(id);
+                return doctor;
+            });
+            
+            return Ok(cachedDoctor);
         }
 
         [HttpGet]
         [Route("/api/Doctors/userId/{userID}")]
         public async Task<ActionResult> GetDoctorByUserID(int userID)
         {
-            var doctor = await _context.Doctors
-                .Where(d => d.UserID == userID)
-                .FirstOrDefaultAsync();
-            if (doctor == null) return NotFound();
-            return Ok(doctor);
+            var cachedDoctor = await _hybridCache.GetOrCreateAsync($"DoctorUser_{userID}", async t =>
+            {
+                var doctor = await _context.Doctors
+                    .Where(d => d.UserID == userID)
+                    .FirstOrDefaultAsync();
+                return doctor;
+            });
+            
+            if (cachedDoctor == null) return NotFound();
+            return Ok(cachedDoctor);
         }
 
 
-        //[Authorize(Roles = "Admin")]
+        [Authorize]
         [HttpPost]
         public async Task<ActionResult> AddDoctor(Doctors newDoctor)
         {
@@ -79,7 +94,6 @@ namespace EHospital.Controllers
             return CreatedAtAction(nameof(GetDoctorById), new { id = newDoctor.ID }, newDoctor);
         }
 
-        //[Authorize(Roles = "doctor")]
         [HttpPut("{id}")]
         public async Task<IActionResult> UpdateDoctor(int id, Doctors updatedDoctor)
         {
@@ -100,7 +114,7 @@ namespace EHospital.Controllers
             return Ok(doctor);
         }
 
-        //[Authorize(Roles = "Admin")]
+        [Authorize]
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteDoctor(int id)
         {

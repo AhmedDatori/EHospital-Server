@@ -35,62 +35,59 @@ namespace EHospital.Controllers
             //var currentUserRole = HttpContext.User.FindFirstValue(ClaimTypes.Role);
             
 
-            var patients = await _context.Patients.ToListAsync();
-            return Ok(patients);
-
             //if (currentUserRole != "admin") return Forbid($"You are not admin {currentUserRole}");
 
-            var cachKey = "Patients";
-            var cachedPatient = await _hybridCache.GetOrCreateAsync(cachKey, async t =>
-            {
+            //var cachKey = "Patients";
+            //var cachedPatient = await _hybridCache.GetOrCreateAsync(cachKey, async t =>
+            //{ 
                 var patients = await _context.Patients.ToListAsync();
-                return patients;
+                return Ok(patients);
 
-            });
+            //});
 
 
-            return Ok(cachedPatient);
+            //return Ok(cachedPatient);
         }
 
-        [Authorize]
+        //[Authorize]
         [HttpGet]
         [Route("/api/Patient/userId/{userID}")]
         public async Task<ActionResult> GetPatientByUserID(int userID)
         {
-            var currentUserID = HttpContext.User.FindFirstValue(ClaimTypes.NameIdentifier);
-            var currentUserRole = HttpContext.User.FindFirstValue(ClaimTypes.Role);
+            //var currentUserID = HttpContext.User.FindFirstValue(ClaimTypes.NameIdentifier);
+            //var currentUserRole = HttpContext.User.FindFirstValue(ClaimTypes.Role);
 
-            if (currentUserID != userID.ToString() && currentUserRole!="admin") return Forbid();
+            //if (currentUserID != userID.ToString() && currentUserRole!="admin") return Forbid();
 
-            var cachKey = $"Patient_UserID_{userID}";
+            //var cachKey = $"Patient_UserID_{userID}";
 
-            var cachedPatient = await _hybridCache.GetOrCreateAsync(cachKey, async t =>
-            {
+            //var cachedPatient = await _hybridCache.GetOrCreateAsync(cachKey, async t =>
+            //{
                 var patient = await _context.Patients
                 .Where(p => p.UserID == userID)
                 .FirstOrDefaultAsync();
                 if (patient == null) return null;
-                return patient;
-            });
-            return Ok(cachedPatient);
+                return Ok(patient);
+            //});
+            //return Ok(cachedPatient);
         }
 
 
-        [Authorize]
+        //[Authorize]
         [HttpGet("{id}")]
         public async Task<ActionResult> GetPatient(int id)
         {
 
-            var cachKey = $"Patient_{id}";
-            var cachedPatient = await _hybridCache.GetOrCreateAsync(cachKey, async t =>
-            {
-                var patient = await _context.Patients.Where(p => p.ID == id).FirstOrDefaultAsync();
-                return patient;
+            //var cachKey = $"Patient_{id}";
+            //var cachedPatient = await _hybridCache.GetOrCreateAsync(cachKey, async t =>
+            //{
+                var patient = await _context.Patients.FindAsync(id);
+                return Ok(patient);
 
-            });
+            //});
 
 
-            return cachedPatient is null ? NotFound(): Ok(cachedPatient);
+            //return cachedPatient is null ? NotFound(): Ok(cachedPatient);
         }
 
         [HttpPost]
@@ -157,23 +154,32 @@ namespace EHospital.Controllers
             return Ok(patient);
         }
 
-        [Authorize]
+        //[Authorize]
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeletePatient(int id)
         {
-            var currentUserID = HttpContext.User.FindFirstValue(ClaimTypes.NameIdentifier);
-            var currentUserRole = HttpContext.User.FindFirstValue(ClaimTypes.Role);
+            //var currentUserID = HttpContext.User.FindFirstValue(ClaimTypes.NameIdentifier);
+            //var currentUserRole = HttpContext.User.FindFirstValue(ClaimTypes.Role);
 
             // Find the patient
             var patient = await _context.Patients.FindAsync(id);
             if (patient == null) return NotFound();
 
             // Authorization check
-            if (currentUserID != patient.UserID.ToString() && currentUserRole != "admin") return Forbid();
+            //if (currentUserID != patient.UserID.ToString() && currentUserRole != "admin") return Forbid();
 
             // Sequential database operations
             _context.Patients.Remove(patient);
             await _context.SaveChangesAsync();
+
+            // Delete all the apointments that has the patientID == id
+            var appointments = await _context.Appointments.Where(a => a.PatientsID == id).ToListAsync();
+            _context.Appointments.RemoveRange(appointments);
+            await _context.SaveChangesAsync();
+
+
+
+
 
             // Find user and delete
             var user = await _context.UserH.FindAsync(patient.UserID);

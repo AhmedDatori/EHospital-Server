@@ -134,9 +134,9 @@ namespace EHospital.Services
         {
             var claims = new List<Claim>
             {
-                new Claim(ClaimTypes.Name,user.Email),
-                new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
-                new Claim(ClaimTypes.Role, user.Role)
+                new Claim("email",user.Email),
+                new Claim("userID", user.Id.ToString()),
+                new Claim("role", user.Role)
             };
 
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(configuration.GetValue<string>("AppSettings:Token")!));

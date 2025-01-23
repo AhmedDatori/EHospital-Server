@@ -45,7 +45,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 builder.Services.AddScoped<IAuthService, AuthService>();
 
 
-
+builder.Services.AddMemoryCache();
 
 
 #pragma warning disable EXTEXP0018 // Type is for evaluation purposes only and is subject to change or removal in future updates. Suppress this diagnostic to proceed.
@@ -55,7 +55,7 @@ builder.Services.AddHybridCache(options =>
     options.MaximumPayloadBytes = 1024 * 1024;
     options.DefaultEntryOptions = new HybridCacheEntryOptions()
     {
-        Expiration = TimeSpan.FromSeconds(30)
+        Expiration = TimeSpan.FromSeconds(1)
     };
 });
 #pragma warning restore EXTEXP0018 // Type is for evaluation purposes only and is subject to change or removal in future updates. Suppress this diagnostic to proceed.
