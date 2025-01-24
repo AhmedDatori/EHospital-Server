@@ -10,15 +10,15 @@ using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
+
 builder.Services.AddControllers();
 builder.Services.AddOpenApi();
 
-// Configure CORS
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowWebApp",
-        policy => policy.AllowAnyOrigin()  // For development, allow any origin
+        policy => policy.AllowAnyOrigin()  
                         .AllowAnyMethod()
                         .AllowAnyHeader());
 });
@@ -64,7 +64,7 @@ builder.Services.AddHybridCache(options =>
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
+
 if (app.Environment.IsDevelopment())
 {
     app.MapScalarApiReference();
@@ -73,7 +73,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-app.UseCors("AllowWebApp");  // Apply CORS policy
+app.UseCors("AllowWebApp");  
 
 app.UseAuthorization();
 

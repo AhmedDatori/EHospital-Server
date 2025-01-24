@@ -28,8 +28,8 @@ namespace EHospital.Controllers
         [HttpGet]
         public async Task<ActionResult> GetDoctors()
         {
-            var cachKey = "Doctors";
-            var cachedDoctor = await _hybridCache.GetOrCreateAsync(cachKey, async t =>
+            var cacheKey = "Doctors";
+            var cachedDoctor = await _hybridCache.GetOrCreateAsync(cacheKey, async t =>
             {
                 var doctors = await _context.Doctors.ToListAsync();
                 return doctors;
@@ -53,7 +53,7 @@ namespace EHospital.Controllers
         [Route("/api/Doctors/userId/{userID}")]
         public async Task<ActionResult> GetDoctorByUserID(int userID)
         {
-            var cachedDoctor = await _hybridCache.GetOrCreateAsync($"DoctorUser_{userID}", async t =>
+            var cachedDoctor = await _hybridCache.GetOrCreateAsync($"DoctorUser_u{userID}", async t =>
             {
                 var doctor = await _context.Doctors
                     .Where(d => d.UserID == userID)
@@ -65,6 +65,49 @@ namespace EHospital.Controllers
             return Ok(cachedDoctor);
         }
 
+        // get all the patients that has an appointment with the doctor
+        [Authorize]
+        [HttpGet]
+        [Route("/api/Doctors/{id}/Patients")]
+        public async Task<ActionResult> GetDoctorPatients(int id)
+        {
+            var currentUserID = HttpContext.User.FindFirstValue("userID");
+            var currentUserRole = HttpContext.User.FindFirstValue("role");
+
+
+            var doctor = await _context.Doctors.FindAsync( id);
+
+
+            if (doctor == null) return NotFound();
+            if (currentUserRole != "admin" && currentUserID != doctor.UserID.ToString())
+            {
+                currentUserRole = HttpContext.User.FindFirstValue(ClaimTypes.Role);
+                if (currentUserRole != "admin" && currentUserID != doctor.UserID.ToString())
+                    return Forbid("You are not authorized to view this content");
+            };
+
+
+            var cachedPatients = await _hybridCache.GetOrCreateAsync($"DoctorPatients_{id}", async t =>
+            {
+                // Fetch appointments for the doctor
+                var appointmentPatientIds = await _context.Appointments
+                    .Where(a => a.DoctorID == id)
+                    .Select(a => a.PatientsID)
+                    .Distinct() // Ensure unique patient IDs
+                    .ToListAsync();
+
+                // Fetch patients based on the patient IDs
+                var patients = await _context.Patients
+                    .Where(p => appointmentPatientIds.Contains(p.ID))
+                    .ToListAsync();
+
+                return patients;
+
+                
+            });
+
+            return Ok(cachedPatients);
+        }
 
         [Authorize]
         [HttpPost]
@@ -72,8 +115,12 @@ namespace EHospital.Controllers
         {
             var currentUserID = HttpContext.User.FindFirstValue("userID");
             var currentUserRole = HttpContext.User.FindFirstValue("role");
-
-            if (currentUserRole != "admin") return Forbid();
+            if (currentUserRole != "admin")
+            {
+                currentUserRole = HttpContext.User.FindFirstValue(ClaimTypes.Role);
+                if (currentUserRole != "admin")
+                    return Forbid("You are not authorized to view this content");
+            };
 
             Users newUser = new Users
             {
@@ -109,9 +156,16 @@ namespace EHospital.Controllers
 
 
             var doctor = await _context.Doctors.FirstOrDefaultAsync(x => x.ID == id);
-            if (doctor == null) return NotFound();
 
-            if (currentUserRole != "admin" && currentUserID!= doctor.UserID.ToString()) return Forbid();
+
+            if (doctor == null) return NotFound();
+            if (currentUserRole != "admin" && currentUserID != doctor.UserID.ToString())
+            {
+                currentUserRole = HttpContext.User.FindFirstValue(ClaimTypes.Role);
+                if (currentUserRole != "admin" && currentUserID != doctor.UserID.ToString())
+                    return Forbid("You are not authorized to view this content");
+            };
+
             
             var userUpdate = await _authService.UpdateUserAsync(updatedDoctor.Email, doctor.Email, updatedDoctor.Password);
             if (userUpdate == null)
@@ -135,10 +189,21 @@ namespace EHospital.Controllers
             var currentUserRole = HttpContext.User.FindFirstValue("role");
 
 
+
             var doctor = await _context.Doctors.FindAsync(id);
             if (doctor == null) return NotFound();
 
-            if (currentUserRole != "admin" && currentUserID != doctor.UserID.ToString()) return Forbid();
+
+            if (currentUserRole != "admin" && currentUserID != doctor.UserID.ToString())
+            {
+                currentUserRole = HttpContext.User.FindFirstValue(ClaimTypes.Role);
+                if (currentUserRole != "admin" && currentUserID != doctor.UserID.ToString())
+                    return Forbid("You are not authorized to view this content");
+            };
+
+
+            
+
 
             _context.Doctors.Remove(doctor);
             await _context.SaveChangesAsync();

@@ -28,7 +28,11 @@ namespace EHospital.Controllers
         {
             var currentUserRole = HttpContext.User.FindFirstValue("role");
             if (currentUserRole != "admin")
-                return Forbid("You are not authorized to view this content");
+            {
+                currentUserRole = HttpContext.User.FindFirstValue(ClaimTypes.Role);
+                if (currentUserRole != "admin")
+                    return Forbid("You are not authorized to view this content");
+            };
             var admins = await _context.Admins.ToListAsync();
             return Ok(admins);
         }
@@ -38,7 +42,11 @@ namespace EHospital.Controllers
         {
             var currentUserRole = HttpContext.User.FindFirstValue("role");
             if (currentUserRole != "admin")
-                return Forbid("You are not authorized to view this content");
+            {
+                currentUserRole = HttpContext.User.FindFirstValue(ClaimTypes.Role);
+                if (currentUserRole != "admin")
+                    return Forbid("You are not authorized to view this content");
+            };
 
             var admin = await _context.Admins.FindAsync(id);
             if (admin == null) return NotFound();
@@ -51,15 +59,13 @@ namespace EHospital.Controllers
         public async Task<ActionResult> GetAdminByUserID(int userID)
         {
             var currentUserRole = HttpContext.User.FindFirstValue("role");
-
-            var claims = HttpContext.User.Claims;
-            foreach (var claim in claims)
-            {
-                Console.WriteLine($"{claim.Type}: {claim.Value}");
-            }
-
             if (currentUserRole != "admin")
-                return Forbid("You are not authorized to view this content");
+            {
+                currentUserRole = HttpContext.User.FindFirstValue(ClaimTypes.Role);
+                if (currentUserRole != "admin")
+                    return Forbid("You are not authorized to view this content");
+            };
+            
 
             var admin = await _context.Admins
                 .Where(a => a.UserID == userID)
@@ -70,13 +76,13 @@ namespace EHospital.Controllers
 
 
 
-        [Authorize]
+        //[Authorize]
         [HttpPost]
         public async Task<ActionResult> AddAdmin(Admins admin)
         {
-            var currentUserRole = HttpContext.User.FindFirstValue("role");
-            if (currentUserRole != "admin")
-                return Forbid("You are not authorized to view this content");
+            //var currentUserRole = HttpContext.User.FindFirstValue("role");
+            //if (currentUserRole != "admin")
+            //    return Forbid("You are not authorized to view this content");
 
 
             Users newUser = new Users
@@ -110,7 +116,11 @@ namespace EHospital.Controllers
         {
             var currentUserRole = HttpContext.User.FindFirstValue("role");
             if (currentUserRole != "admin")
-                return Forbid("You are not authorized to view this content");
+            {
+                currentUserRole = HttpContext.User.FindFirstValue(ClaimTypes.Role);
+                if (currentUserRole != "admin")
+                    return Forbid("You are not authorized to view this content");
+            };
 
 
             var admin = await _context.Admins.FindAsync(id);
@@ -137,7 +147,11 @@ namespace EHospital.Controllers
         {
             var currentUserRole = HttpContext.User.FindFirstValue("role");
             if (currentUserRole != "admin")
-                return Forbid("You are not authorized to view this content");
+            {
+                currentUserRole = HttpContext.User.FindFirstValue(ClaimTypes.Role);
+                if (currentUserRole != "admin")
+                    return Forbid("You are not authorized to view this content");
+            };
 
 
             var admin = await _context.Admins.FindAsync(id);

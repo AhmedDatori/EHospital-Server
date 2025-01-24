@@ -157,7 +157,7 @@ namespace EHospital.Services
         public async Task<UserH> GetUserByIdAsync(int userId)
         {
 
-            // Retrieve the user by their ID
+            
             var user = await context.UserH.FindAsync(userId);
 
             return user;

@@ -17,19 +17,26 @@ namespace EHospital.Controllers
         private readonly UsersDbContext _context = context;
         private readonly HybridCache _hybridCache = hybridCache;
 
-        //[Authorize]
+        [Authorize]
         [HttpGet]
         public async Task<ActionResult<List<Appointments>>> GetAppointments()
         {
-            //var currentUserRole = HttpContext.User.FindFirstValue(ClaimTypes.Role);
-            //if (currentUserRole != "admin") return Forbid();
-            //var cachKey = $"Appointments";
-            //var cachedData = await _hybridCache.GetOrCreateAsync(cachKey, async t =>
-            //{
+            var currentUserRole = HttpContext.User.FindFirstValue(ClaimTypes.Role);
+
+            if (currentUserRole != "admin")
+            {
+                currentUserRole = HttpContext.User.FindFirstValue("role");
+                if (currentUserRole != "admin")
+                    return Forbid("You are not authorized to view this content");
+            }
+
+            var cacheKey = $"Appointments";
+            var cachedData = await _hybridCache.GetOrCreateAsync(cacheKey, async t =>
+            {
                 var appointments = await _context.Appointments.ToListAsync();
                 return appointments;
-            //});
-            //return Ok(cachedData);
+            });
+            return Ok(cachedData);
         }
 
         [Authorize]
@@ -41,6 +48,7 @@ namespace EHospital.Controllers
             // Get user ID and role from the token
             var currentUserID = HttpContext.User.FindFirstValue(ClaimTypes.NameIdentifier);
             var currentUserRole = HttpContext.User.FindFirstValue(ClaimTypes.Role);
+
             var appointment = await _context.Appointments.FindAsync(id);
             if (appointment == null) return NotFound();
             var patient = await _context.Patients.FindAsync(appointment.PatientsID);
@@ -55,25 +63,30 @@ namespace EHospital.Controllers
             return Ok(appointment);
         }
 
-        //[Authorize]
+        [Authorize]
         [HttpPost]
         public async Task<ActionResult<Appointments>> AddAppointment(Appointments newAppointment)
         {
             if (newAppointment == null) return BadRequest();
-            
-            //var currentUserID = HttpContext.User.FindFirstValue(ClaimTypes.NameIdentifier);
-            //var currentUserRole = HttpContext.User.FindFirstValue(ClaimTypes.Role);
+
+            var currentUserID = HttpContext.User.FindFirstValue("userID");
+            var currentUserRole = HttpContext.User.FindFirstValue( ClaimTypes.Role);
 
 
             var patient = await _context.Patients.FindAsync(newAppointment.PatientsID);
             var doctor = await _context.Doctors.FindAsync(newAppointment.DoctorID);
             if (patient == null || doctor == null) return BadRequest();
-            //if ((currentUserID != patient.UserID.ToString() && currentUserID != doctor.UserID.ToString()) && currentUserRole != "admin") 
-            //{ 
-            //    return Forbid();
-            //}
 
-            
+
+            if (currentUserRole != "admin")
+            {
+                currentUserRole = HttpContext.User.FindFirstValue("role");
+                if (currentUserRole != "admin")
+                    if(currentUserID != patient.UserID.ToString() && currentUserID != doctor.UserID.ToString())
+                        return Forbid("You are not authorized to view this content");
+            }
+
+
             // if user has another appointment with the same doctor then return bad request
             var appointment = await _context.Appointments.FirstOrDefaultAsync(x => x.DoctorID == newAppointment.DoctorID && x.PatientsID == newAppointment.PatientsID);
 
@@ -84,61 +97,60 @@ namespace EHospital.Controllers
             return CreatedAtAction(nameof(GetAppointmentByID), new { id = newAppointment.ID }, newAppointment);
         }
 
-        //[HttpPut]
-        //[Route("{id}")]
-        //public async Task<IActionResult> UpdateAppointment(int id, Appointments updatedAppointment)
-        //{
-        //    var appointment = await _context.Appointments.FirstOrDefaultAsync(x => x.ID == id);
-        //    if (appointment == null) return NotFound();
-        //    appointment.DoctorID = updatedAppointment.DoctorID;
-
-        //    await _context.SaveChangesAsync();
-        //    return Ok(appointment);
-        //}
-
-        //[Authorize]
+        [Authorize]
         [HttpDelete]
         [Route("{id}")]
         public async Task<ActionResult> DeleteAppointment(int id)
         {
-            //var currentUserID = HttpContext.User.FindFirstValue(ClaimTypes.NameIdentifier);
-            //var currentUserRole = HttpContext.User.FindFirstValue(ClaimTypes.Role);
             var appointment = await _context.Appointments.FindAsync(id);
             if (appointment == null) return NotFound();
 
+
+            var currentUserID = HttpContext.User.FindFirstValue("userID");
+            var currentUserRole = HttpContext.User.FindFirstValue(ClaimTypes.Role );
+
+
             var patient = await _context.Patients.FindAsync(appointment.PatientsID);
             var doctor = await _context.Doctors.FindAsync(appointment.DoctorID);
+            if (patient == null || doctor == null) return BadRequest();
 
-            //if ((currentUserID != patient.UserID.ToString() && currentUserID != doctor.UserID.ToString()) && currentUserRole != "admin")
-            //{
-            //    return Forbid();
-            //}
+            if (currentUserRole != "admin" && currentUserRole != "doctor")
+            {
+                currentUserRole = HttpContext.User.FindFirstValue("role");
+                if (currentUserRole != "admin" && currentUserRole != "doctor")
+                    if (currentUserID != patient.UserID.ToString() && currentUserID != doctor.UserID.ToString())
+                        return Forbid("You are not authorized to view this content");
+            }
 
             _context.Appointments.Remove(appointment);
             await _context.SaveChangesAsync();
             return NoContent();
         }
 
-        //[Authorize]
+        [Authorize]
         [HttpGet]
         [Route("/api/Appointments/patient/{patientID}")]
         public async Task<ActionResult<List<Appointments>>> GetAppointmentsByPatient(int patientID)
         {
-                // Get user ID and role from the token
-            //var currentUserID = HttpContext.User.FindFirstValue(ClaimTypes.NameIdentifier);
-            //var currentUserRole = HttpContext.User.FindFirstValue(ClaimTypes.Role);
+            //Get user ID and role from the token
+            var currentUserID = HttpContext.User.FindFirstValue("userID");
+            var currentUserRole = HttpContext.User.FindFirstValue( ClaimTypes.Role);
             var patient = await _context.Patients.FindAsync(patientID);
             if (patient == null) return null;
 
-            // Check if the current user is the patient or an admin
-            //if (currentUserID != patient.UserID.ToString() && currentUserRole != "admin")
-            //{
-            //    return Forbid(); // Forbids access if not the patient or an admin
-            //}
 
-            //var cachKey = $"Appointments_p{patientID}";
-            //var cachedData = await _hybridCache.GetOrCreateAsync(cachKey, async t =>
-            //{
+            //Check if the current user is the patient or an admin
+            if (currentUserRole != "admin" && currentUserRole != "doctor")
+            {
+                currentUserRole = HttpContext.User.FindFirstValue("role");
+                if (currentUserRole != "admin" && currentUserRole!="doctor")
+                    if (currentUserID != patient.UserID.ToString()) 
+                        return Forbid("You are not authorized to view this content");
+            }
+
+            var cacheKey = $"Appointments_p{patientID}";
+            var cachedData = await _hybridCache.GetOrCreateAsync(cacheKey, async t =>
+            {
                 var appointments = await _context.Appointments
                 .Where(x => x.PatientsID == patient.ID)
                 .ToListAsync();
@@ -147,46 +159,49 @@ namespace EHospital.Controllers
                     return null;
 
                 return appointments;
-            //});
+            });
 
-            //return Ok(cachedData);
-            
+            return Ok(cachedData);
+
         }
 
-        
+
+        [Authorize]
+        [HttpGet]
+        [Route("/api/Appointments/doctor/{doctorID}")]
+        public async Task<ActionResult<List<Appointments>>> GetAppointmentsByDoctor(int doctorID)
+        {
+            //Get user ID and role from the token
+            var currentUserID = HttpContext.User.FindFirstValue("userID");
+            var currentUserRole = HttpContext.User.FindFirstValue( ClaimTypes.Role);
+            var doctor = await _context.Doctors.FindAsync(doctorID);
+            if (doctor == null) return NotFound("Doctor not found"); ;
 
 
+            //Check if the current user is the patient or an admin
+            if (currentUserRole != "admin")
+            {
+                currentUserRole = HttpContext.User.FindFirstValue("role");
+                if (currentUserRole != "admin")
+                    if (currentUserID != doctor.UserID.ToString()) return Forbid("You are not authorized to view this content");
+            }
 
-        ////get appointment by patient id
-        //[Authorize]
-        //[HttpGet]
-        //[Route("/api/Appointments/patients/{patientID}")]
-        //public async Task<ActionResult<List<Appointments>>> GetAppointmentsByPatientID(int patientID)
-        //{
-        //    var currentUserID = HttpContext.User.FindFirstValue(ClaimTypes.NameIdentifier);
-        //    var currentUserRole = HttpContext.User.FindFirstValue(ClaimTypes.Role);
-        //    var patient = await _context.Patients.FindAsync(patientID);
-        //    // Check if the current user is the patient or an admin
-        //    if (currentUserID != patient.UserID.ToString() && currentUserRole != "admin")
-        //    {
-        //        return Forbid(); // Forbids access if not the patient or an admin
-        //    }
-        //    var cachKey = $"Appointments_pp{patientID}";
+            var cacheKey = $"Appointments_p{doctorID}";
+            var cachedData = await _hybridCache.GetOrCreateAsync(cacheKey, async t =>
+            {
+                var appointments = await _context.Appointments
+                .Where(x => x.DoctorID == doctor.ID)
+                .ToListAsync();
 
-        //    var cachedData = await _hybridCache.GetOrCreateAsync(cachKey, async t =>
-        //    {
-        //        var appointments = await _context.Appointments
-        //        .Where(x => x.PatientsID == patientID)
-        //        .ToListAsync();
+                if (appointments == null || appointments.Count == 0)
+                    return null;
 
-        //        if (appointments == null || appointments.Count == 0)
-        //            return null;
+                return appointments;
+            });
 
-        //        return appointments;
-        //    });
+            return Ok(cachedData);
 
-        //    return Ok(cachedData);
-        //}
+        }
 
 
     }
