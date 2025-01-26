@@ -64,11 +64,11 @@ namespace EHospital.Controllers
 
             if (currentUserRole != "admin" && currentUserRole != "doctor")
             {
-                currentUserRole = HttpContext.User.FindFirstValue("role");
-                if (currentUserRole != "admin" && currentUserRole != "doctor")
+                
                     if (currentUserID != userID.ToString()) return Forbid("You are not authorized to view this content");
 
             };
+
 
 
             var cacheKey = $"Patient_UserID_{userID}";
