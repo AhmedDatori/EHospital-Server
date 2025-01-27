@@ -1,6 +1,7 @@
 ﻿using EHospital.Data;
 using EHospital.Models;
 using EHospital.Services;
+using EHospital.Services.Caching;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -17,34 +18,59 @@ namespace EHospital.Controllers
         private readonly UsersDbContext _context;
         private readonly IAuthService _authService;
         private readonly HybridCache _hybridCache;
+        private readonly IRedisCacheService _cache;
 
-        public DoctorsController(UsersDbContext context, IAuthService authService , HybridCache hybridCache)
+        public DoctorsController(UsersDbContext context, IAuthService authService , HybridCache hybridCache, IRedisCacheService cache)
         {
             _context = context;
             _authService = authService;
             _hybridCache = hybridCache;
+            _cache = cache;
         }
 
         [HttpGet]
         public async Task<ActionResult> GetDoctors()
         {
             var cacheKey = "Doctors";
-            var cachedDoctor = await _hybridCache.GetOrCreateAsync(cacheKey, async t =>
+            // Redis cache
+            var cachedDoctor = _cache.GetData<List<Doctors>>(cacheKey);
+            if (cachedDoctor != null)
             {
-                var doctors = await _context.Doctors.ToListAsync();
-                return doctors;
-            });
+                return Ok(cachedDoctor);
+            }
+            cachedDoctor = await _context.Doctors.ToListAsync();
+            _cache.SetData(cacheKey, cachedDoctor);
+
+
+            // Hybrid cache
+            //var cachedDoctor = await _hybridCache.GetOrCreateAsync(cacheKey, async t =>
+            //{
+            //    var doctors = await _context.Doctors.ToListAsync();
+            //    return doctors;
+            //});
             return Ok(cachedDoctor);
         }
 
         [HttpGet("{id}")]
         public async Task<ActionResult> GetDoctorById(int id)
         {
-            var cachedDoctor = await _hybridCache.GetOrCreateAsync($"Doctor_{id}", async t =>
+            var cacheKey = $"Doctor_{id}";
+            // Redis cache
+            var cachedDoctor = _cache.GetData<Doctors>(cacheKey);
+            if (cachedDoctor != null)
             {
-                var doctor = await _context.Doctors.FindAsync(id);
-                return doctor;
-            });
+                return Ok(cachedDoctor);
+            }
+            cachedDoctor = await _context.Doctors.FindAsync(id);
+            if (cachedDoctor == null) return NotFound();
+            _cache.SetData(cacheKey, cachedDoctor);
+
+            // Hybrid cache
+            //var cachedDoctor = await _hybridCache.GetOrCreateAsync($"Doctor_{id}", async t =>
+            //{
+            //    var doctor = await _context.Doctors.FindAsync(id);
+            //    return doctor;
+            //});
             
             return Ok(cachedDoctor);
         }
@@ -53,15 +79,29 @@ namespace EHospital.Controllers
         [Route("/api/Doctors/userId/{userID}")]
         public async Task<ActionResult> GetDoctorByUserID(int userID)
         {
-            var cachedDoctor = await _hybridCache.GetOrCreateAsync($"DoctorUser_u{userID}", async t =>
+            var cacheKey = $"DoctorUser_u{userID}";
+            // Redis cache
+            var cachedDoctor = _cache.GetData<Doctors>(cacheKey);
+            if (cachedDoctor != null)
             {
-                var doctor = await _context.Doctors
-                    .Where(d => d.UserID == userID)
-                    .FirstOrDefaultAsync();
-                return doctor;
-            });
-            
+                return Ok(cachedDoctor);
+            }
+            cachedDoctor = await _context.Doctors
+                .Where(d => d.UserID == userID)
+                .FirstOrDefaultAsync();
             if (cachedDoctor == null) return NotFound();
+            _cache.SetData(cacheKey, cachedDoctor);
+
+            // Hybrid cache
+            //var cachedDoctor = await _hybridCache.GetOrCreateAsync($"DoctorUser_u{userID}", async t =>
+            //{
+            //    var doctor = await _context.Doctors
+            //        .Where(d => d.UserID == userID)
+            //        .FirstOrDefaultAsync();
+            //    return doctor;
+            //});
+
+            //if (cachedDoctor == null) return NotFound();
             return Ok(cachedDoctor);
         }
 
@@ -85,28 +125,50 @@ namespace EHospital.Controllers
                 if (currentUserRole != "admin" && currentUserID != doctor.UserID.ToString())
                     return Forbid("You are not authorized to view this content");
             };
-
-
-            var cachedPatients = await _hybridCache.GetOrCreateAsync($"DoctorPatients_{id}", async t =>
+            
+            var cacheKey = $"DoctorPatients_{id}";
+            // Redis cache
+            var cachedPatients = _cache.GetData<List<Patients>>(cacheKey);
+            if (cachedPatients != null)
             {
-                // Fetch appointments for the doctor
-                var appointmentPatientIds = await _context.Appointments
-                    .Where(a => a.DoctorID == id)
-                    .Select(a => a.PatientsID)
-                    .Distinct() // Ensure unique patient IDs
-                    .ToListAsync();
+                return Ok(cachedPatients);
+            }
+            // Fetch appointments for the doctor
+            var appointmentPatientIds = await _context.Appointments
+                .Where(a => a.DoctorID == id)
+                .Select(a => a.PatientsID)
+                .Distinct() // Ensure unique patient IDs
+                .ToListAsync();
 
-                // Fetch patients based on the patient IDs
-                var patients = await _context.Patients
-                    .Where(p => appointmentPatientIds.Contains(p.ID))
-                    .ToListAsync();
+            // Fetch patients based on the patient IDs
+            var patients = await _context.Patients
+                .Where(p => appointmentPatientIds.Contains(p.ID))
+                .ToListAsync();
 
-                return patients;
+            _cache.SetData(cacheKey, patients);
+            return Ok(patients);
 
-                
-            });
+            // Hybrid cache
+            //var cachedPatients = await _hybridCache.GetOrCreateAsync($"DoctorPatients_{id}", async t =>
+            //{
+            //    // Fetch appointments for the doctor
+            //    var appointmentPatientIds = await _context.Appointments
+            //        .Where(a => a.DoctorID == id)
+            //        .Select(a => a.PatientsID)
+            //        .Distinct() // Ensure unique patient IDs
+            //        .ToListAsync();
 
-            return Ok(cachedPatients);
+            //    // Fetch patients based on the patient IDs
+            //    var patients = await _context.Patients
+            //        .Where(p => appointmentPatientIds.Contains(p.ID))
+            //        .ToListAsync();
+
+            //    return patients;
+
+
+        //});
+
+        //    return Ok(cachedPatients);
         }
 
         [Authorize]
@@ -143,6 +205,8 @@ namespace EHospital.Controllers
             // Set IDENTITY_INSERT back to OFF
             await _context.Database.ExecuteSqlRawAsync("SET IDENTITY_INSERT Doctors OFF");
 
+            // Redis cache
+            _cache.DeleteData("Doctors");
 
             return CreatedAtAction(nameof(GetDoctorById), new { id = newDoctor.ID }, newDoctor);
         }
@@ -178,6 +242,11 @@ namespace EHospital.Controllers
             doctor.Birthdate = updatedDoctor.Birthdate;
 
             await _context.SaveChangesAsync();
+
+            // Redis cache
+            _cache.DeleteData("Doctors");
+            _cache.DeleteData($"Doctor_{id}");
+
             return Ok(doctor);
         }
 
@@ -217,6 +286,10 @@ namespace EHospital.Controllers
             {
                 await _authService.DeleteUserAsync(user); 
             }
+
+            // Redis cache
+            _cache.DeleteData("Doctors");
+            _cache.DeleteData($"Doctor_{id}");
 
             return NoContent();
         }

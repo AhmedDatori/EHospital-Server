@@ -1,5 +1,6 @@
 ﻿using EHospital.Data;
 using EHospital.Models;
+using EHospital.Services.Caching;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -12,10 +13,11 @@ namespace EHospital.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-    public class AppointmentsController(UsersDbContext context, HybridCache hybridCache) : ControllerBase
+    public class AppointmentsController(UsersDbContext context, HybridCache hybridCache, IRedisCacheService cache) : ControllerBase
     {
         private readonly UsersDbContext _context = context;
         private readonly HybridCache _hybridCache = hybridCache;
+        private readonly IRedisCacheService _cache = cache;
 
         [Authorize]
         [HttpGet]
@@ -31,11 +33,21 @@ namespace EHospital.Controllers
             }
 
             var cacheKey = $"Appointments";
-            var cachedData = await _hybridCache.GetOrCreateAsync(cacheKey, async t =>
+            // Redis cache
+            var cachedData = _cache.GetData<List<Appointments>>(cacheKey);
+            if (cachedData != null)
             {
-                var appointments = await _context.Appointments.ToListAsync();
-                return appointments;
-            });
+                return Ok(cachedData);
+            }
+            cachedData = await _context.Appointments.ToListAsync();
+            _cache.SetData(cacheKey, cachedData);
+
+            // Hybrid cache
+            //var cachedData = await _hybridCache.GetOrCreateAsync(cacheKey, async t =>
+            //{
+            //    var appointments = await _context.Appointments.ToListAsync();
+            //    return appointments;
+            //});
             return Ok(cachedData);
         }
 
@@ -48,6 +60,7 @@ namespace EHospital.Controllers
             // Get user ID and role from the token
             var currentUserID = HttpContext.User.FindFirstValue(ClaimTypes.NameIdentifier);
             var currentUserRole = HttpContext.User.FindFirstValue(ClaimTypes.Role);
+
 
             var appointment = await _context.Appointments.FindAsync(id);
             if (appointment == null) return NotFound();
@@ -94,6 +107,12 @@ namespace EHospital.Controllers
 
             _context.Appointments.Add(newAppointment);
             await _context.SaveChangesAsync();
+
+            // Redis cache
+            _cache.DeleteData("Appointments");
+            _cache.DeleteData($"Appointments_p{patient.ID}");
+            _cache.DeleteData($"Appointments_d{doctor.ID}");
+
             return CreatedAtAction(nameof(GetAppointmentByID), new { id = newAppointment.ID }, newAppointment);
         }
 
@@ -124,6 +143,11 @@ namespace EHospital.Controllers
 
             _context.Appointments.Remove(appointment);
             await _context.SaveChangesAsync();
+
+            // Redis cache
+            _cache.DeleteData("Appointments");
+            _cache.DeleteData($"Appointments_p{patient.ID}");
+
             return NoContent();
         }
 
@@ -149,17 +173,31 @@ namespace EHospital.Controllers
             }
 
             var cacheKey = $"Appointments_p{patientID}";
-            var cachedData = await _hybridCache.GetOrCreateAsync(cacheKey, async t =>
+            // Redis cache
+            var cachedData = _cache.GetData<List<Appointments>>(cacheKey);
+            if (cachedData != null)
             {
-                var appointments = await _context.Appointments
-                .Where(x => x.PatientsID == patient.ID)
+                return Ok(cachedData);
+            }
+            cachedData = await _context.Appointments
+                .Where(x => x.PatientsID == patientID)
                 .ToListAsync();
+            if (cachedData == null || cachedData.Count == 0)
+                return NotFound("No appointments found");
+            _cache.SetData(cacheKey, cachedData);
 
-                if (appointments == null || appointments.Count == 0)
-                    return null;
+            // Hybrid cache
+            //var cachedData = await _hybridCache.GetOrCreateAsync(cacheKey, async t =>
+            //{
+            //    var appointments = await _context.Appointments
+            //    .Where(x => x.PatientsID == patient.ID)
+            //    .ToListAsync();
 
-                return appointments;
-            });
+            //    if (appointments == null || appointments.Count == 0)
+            //        return null;
+
+            //    return appointments;
+            //});
 
             return Ok(cachedData);
 
@@ -186,18 +224,33 @@ namespace EHospital.Controllers
                     if (currentUserID != doctor.UserID.ToString()) return Forbid("You are not authorized to view this content");
             }
 
-            var cacheKey = $"Appointments_p{doctorID}";
-            var cachedData = await _hybridCache.GetOrCreateAsync(cacheKey, async t =>
+            var cacheKey = $"Appointments_d{doctorID}";
+            // Redis cache
+            var cachedData = _cache.GetData<List<Appointments>>(cacheKey);
+            if (cachedData != null)
             {
-                var appointments = await _context.Appointments
-                .Where(x => x.DoctorID == doctor.ID)
+                return Ok(cachedData);
+            }
+            cachedData = await _context.Appointments
+                .Where(x => x.DoctorID == doctorID)
                 .ToListAsync();
+            if (cachedData == null || cachedData.Count == 0)
+                return NotFound("No appointments found");
+            _cache.SetData(cacheKey, cachedData);
 
-                if (appointments == null || appointments.Count == 0)
-                    return null;
 
-                return appointments;
-            });
+            // Hybrid cache
+            //var cachedData = await _hybridCache.GetOrCreateAsync(cacheKey, async t =>
+            //{
+            //    var appointments = await _context.Appointments
+            //    .Where(x => x.DoctorID == doctor.ID)
+            //    .ToListAsync();
+
+            //    if (appointments == null || appointments.Count == 0)
+            //        return null;
+
+            //    return appointments;
+            //});
 
             return Ok(cachedData);
 

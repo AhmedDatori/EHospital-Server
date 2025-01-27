@@ -7,30 +7,46 @@ using EHospital.Data;
 using Microsoft.AspNetCore.Authorization;
 using System.Numerics;
 using System.Security.Claims;
+using EHospital.Services.Caching;
 
 namespace EHospital.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-    public class SpecializationsController(UsersDbContext context) : ControllerBase
+    public class SpecializationsController(UsersDbContext context,IRedisCacheService cache) : ControllerBase
     {
         private readonly UsersDbContext _context = context;
+        private readonly IRedisCacheService _cache = cache;
 
         [HttpGet]
         public async Task<ActionResult<List<Specializations>>> GetSpecializations()
         {
-            var specializations = await _context.Specializations.ToListAsync();
 
-            return Ok(specializations);
+            //redis cache
+            var cachedSpecializations = _cache.GetData<List<Specializations>>("Specializations");
+            if (cachedSpecializations != null)
+            {
+                return Ok(cachedSpecializations);
+            }
+            cachedSpecializations = await _context.Specializations.ToListAsync();
+            _cache.SetData("Specializations", cachedSpecializations);
+
+            return Ok(cachedSpecializations);
         }
 
         [HttpGet("{id}")]
         public async Task<ActionResult<Specializations>> GetSpecialization(int id)
         {
-            var specialization = await _context.Specializations.Where(s => s.ID == id).FirstOrDefaultAsync();
-
-            if (specialization == null) return NotFound();
-            return Ok(specialization);
+            // redis cache
+            var cachedSpecialization = _cache.GetData<Specializations>($"Specialization_{id}");
+            if (cachedSpecialization != null)
+            {
+                return Ok(cachedSpecialization);
+            }
+            cachedSpecialization = await _context.Specializations.Where(s => s.ID == id).FirstOrDefaultAsync();
+            if (cachedSpecialization == null) return NotFound();
+            _cache.SetData($"Specialization_{id}", cachedSpecialization);
+            return Ok(cachedSpecialization);
         }
 
         [Authorize]
@@ -48,6 +64,10 @@ namespace EHospital.Controllers
 
             _context.Specializations.Add(specialization);
             await _context.SaveChangesAsync();
+
+            // Redis cache
+            _cache.DeleteData("Specializations");
+            
             return CreatedAtAction(nameof(GetSpecialization), new { id = specialization.ID }, specialization);
         }
 
@@ -72,6 +92,11 @@ namespace EHospital.Controllers
             specialization.Specialization = updatedSpecialization.Specialization;
 
             await _context.SaveChangesAsync();
+
+            // Redis cache
+            _cache.DeleteData("Specializations");
+            _cache.DeleteData($"Specialization_{id}");
+
             return Ok(specialization);
         }
 
@@ -96,6 +121,11 @@ namespace EHospital.Controllers
             if (specialization == null) return NotFound();
             _context.Specializations.Remove(specialization);
             await _context.SaveChangesAsync();
+
+            // Redis cache
+            _cache.DeleteData("Specializations");
+            _cache.DeleteData($"Specialization_{id}");
+
             return NoContent();
         }
     }

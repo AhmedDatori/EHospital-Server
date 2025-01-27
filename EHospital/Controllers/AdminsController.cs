@@ -76,13 +76,13 @@ namespace EHospital.Controllers
 
 
 
-        //[Authorize]
+        [Authorize]
         [HttpPost]
         public async Task<ActionResult> AddAdmin(Admins admin)
         {
-            //var currentUserRole = HttpContext.User.FindFirstValue("role");
-            //if (currentUserRole != "admin")
-            //    return Forbid("You are not authorized to view this content");
+            var currentUserRole = HttpContext.User.FindFirstValue("role");
+            if (currentUserRole != "admin")
+                return Forbid("You are not authorized to view this content");
 
 
             Users newUser = new Users
