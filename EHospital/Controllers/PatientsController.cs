@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using EHospital.Entities;
 using System.Security.Claims;
+using EHospital.Services.Caching;
 
 namespace EHospital.Controllers
 {
@@ -19,12 +20,14 @@ namespace EHospital.Controllers
         private readonly UsersDbContext _context;
         private readonly IAuthService _authService;
         private readonly HybridCache _hybridCache;
+        private readonly IRedisCacheService _cache;
 
-        public PatientsController(UsersDbContext context, IAuthService authService, HybridCache hybridCache)
+        public PatientsController(UsersDbContext context, IAuthService authService, HybridCache hybridCache, IRedisCacheService cache)
         {
             _context = context;
             _authService = authService;
             _hybridCache = hybridCache;
+            _cache = cache;
         }
 
         [Authorize]
@@ -42,12 +45,24 @@ namespace EHospital.Controllers
             };
 
             var cacheKey = "Patients";
-            var cachedPatient = await _hybridCache.GetOrCreateAsync(cacheKey, async t =>
-            {
-                var patients = await _context.Patients.ToListAsync();
-                return patients;
 
-            });
+            // Redis cache
+            var cachedPatient = _cache.GetData<List<Patients>>(cacheKey);
+            if (cachedPatient != null) {
+                return Ok(cachedPatient);
+            }
+
+            cachedPatient = await _context.Patients.ToListAsync();
+            _cache.SetData(cacheKey, cachedPatient);
+
+
+            // Hybrid cache
+            //var cachedPatient = await _hybridCache.GetOrCreateAsync(cacheKey, async t =>
+            //{
+            //    var patients = await _context.Patients.ToListAsync();
+            //    return patients;
+
+            //});
 
 
             return Ok(cachedPatient);
@@ -72,16 +87,29 @@ namespace EHospital.Controllers
 
 
             var cacheKey = $"Patient_UserID_{userID}";
-
-            var cachedPatient = await _hybridCache.GetOrCreateAsync(cacheKey, async t =>
+            // Redis cache
+            var cachedPatient = _cache.GetData<Patients>(cacheKey);
+            if (cachedPatient != null)
             {
-                var patient = await _context.Patients
+                return Ok(cachedPatient);
+            }
+            var patient = await _context.Patients
                 .Where(p => p.UserID == userID)
                 .FirstOrDefaultAsync();
-                if (patient == null) return null;
-                return patient;
-        });
-            return Ok(cachedPatient);
+            if (patient == null) return null;
+            _cache.SetData(cacheKey, patient);
+
+
+            // Hybrid cache
+            //var cachedPatient = await _hybridCache.GetOrCreateAsync(cacheKey, async t =>
+            //{
+            //    var patient = await _context.Patients
+            //    .Where(p => p.UserID == userID)
+            //    .FirstOrDefaultAsync();
+            //    if (patient == null) return null;
+            //    return patient;
+            //});
+            return Ok(patient);
         }
 
 
@@ -92,21 +120,38 @@ namespace EHospital.Controllers
             var currentUserID = HttpContext.User.FindFirstValue("userID");
             var currentUserRole = HttpContext.User.FindFirstValue( ClaimTypes.Role);
 
+
             var cacheKey = $"Patient_{id}";
-            var cachedPatient = await _hybridCache.GetOrCreateAsync(cacheKey, async t =>
+
+            // Redis cache
+            var cachedPatient = _cache.GetData<Patients>(cacheKey);
+            if (cachedPatient != null)
             {
-                var patient = await _context.Patients.FindAsync(id);
+                return Ok(cachedPatient);
+            }
+            cachedPatient = await _context.Patients.FindAsync(id);
+            if (cachedPatient == null) return null;
+            _cache.SetData(cacheKey, cachedPatient);
 
-                if (currentUserRole != "admin" && currentUserRole != "doctor")
-                {
-                    currentUserRole = HttpContext.User.FindFirstValue("role");
-                    if (currentUserRole != "admin" && currentUserRole != "doctor")
-                        if (currentUserID != patient.UserID.ToString()) return null;
-                };
 
-                return patient;
 
-            });
+
+
+            // Hybrid cache
+            //var cachedPatient = await _hybridCache.GetOrCreateAsync(cacheKey, async t =>
+            //{
+            //    var patient = await _context.Patients.FindAsync(id);
+
+            //    if (currentUserRole != "admin" && currentUserRole != "doctor")
+            //    {
+            //        currentUserRole = HttpContext.User.FindFirstValue("role");
+            //        if (currentUserRole != "admin" && currentUserRole != "doctor")
+            //            if (currentUserID != patient.UserID.ToString()) return null;
+            //    };
+
+            //    return patient;
+
+            //});
 
 
             return cachedPatient is null ? NotFound() : Ok(cachedPatient);
@@ -135,6 +180,9 @@ namespace EHospital.Controllers
 
             // Set IDENTITY_INSERT back to OFF
             await _context.Database.ExecuteSqlRawAsync("SET IDENTITY_INSERT Patients OFF");
+
+            // Redis cache
+            _cache.DeleteData("Patients");
 
             return CreatedAtAction(nameof(GetPatient), new { id = patient.ID }, patient);
         }
@@ -184,6 +232,12 @@ namespace EHospital.Controllers
             patient.Birthdate = updatedPatient.Birthdate;
 
             await _context.SaveChangesAsync();
+
+            // Redis cache
+            _cache.DeleteData($"Patient_{id}");
+            _cache.DeleteData("Patients");
+
+
             return Ok(patient);
         }
 
@@ -224,6 +278,10 @@ namespace EHospital.Controllers
             var user = await _context.UserH.FindAsync(patient.UserID);
             await _authService.DeleteUserAsync(user);
 
+
+            // Redis cache
+            _cache.DeleteData($"Patient_{id}");
+            _cache.DeleteData("Patients");
 
             return NoContent();
         }

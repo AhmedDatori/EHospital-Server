@@ -1,0 +1,6 @@
+services:
+  ehospital:
+    image: ${DOCKER_REGISTRY-}ehospital
+    build:
+      context: .
+      dockerfile: EHospital/Dockerfile
